@@ -3,13 +3,15 @@ from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import math
 import gpt4all
+from elevenlabs import clone, generate, play, set_api_key
+from elevenlabs.api import History
 
 
 BACKGROUND_VIDEOS_PATH = r".\BackgroundVideos\\"
 CUTTED_VIDEOS_PATH = r".\CuttedVideos\\"
 OUTPUT_VIDEOS_PATH = r".\OutputVideos\\"
 CAPTIONS_PATH = r".\Captions.txt"
-FONT_PATH = r".KOMIKAX_.ttf"
+FONT_PATH = r".\FONTS\\"
 
 def get_video_duration(video_file_name):
     clip = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_file_name)
@@ -53,33 +55,72 @@ def get_captions(captions_path, caption_text, n_words):
         cutted_captions.append(full_sentence)
     return cutted_captions
 
-def get_caption_video(clip, captions_path, caption_text):
+def get_captions_per_line(caption_text):
+    captions_array =[]
+    arr = caption_text.split('\n')
+    for arr_string in arr:
+        if arr != "" or arr != " ":
+            captions_array.append(arr_string)
+    return captions_array
+
+"""
+MODES:
+    NWORD: -every n-th word
+    PERLINE: -every line separate
+"""
+def get_caption_video(clip, captions_path, caption_text, mode):
+
     caption_clips =[]
-    captions = get_captions(captions_path, caption_text, 5)
+    captions = ""
+    if mode == "NWORD":
+        captions = get_captions(captions_path, caption_text, 5)
+    elif mode == "PERLINE":
+        captions = get_captions_per_line(caption_text)
     duration = clip.duration/len(captions)
 
     fontsize = 55
     shadow_offset = 1
-
+    font = FONT_PATH + "KOMIKAX_.ttf"
     for i in range(len(captions)):
-        shadow_caption_clip = TextClip(captions[i], fontsize=fontsize, color="black", font=FONT_PATH, size=(clip.w, clip.h), method="caption").set_duration(duration).set_start(i * duration).set_position((-shadow_offset, shadow_offset))
-        caption_clip = TextClip(captions[i], fontsize=fontsize, color="white", font=FONT_PATH, size=(clip.w, clip.h), method="caption").set_duration(duration).set_start(i * duration).set_position((0, 0))
+        shadow_caption_clip = TextClip(captions[i], fontsize=fontsize, color="black", font=font, size=(clip.w, clip.h), method="caption").set_duration(duration).set_start(i * duration).set_position((-shadow_offset, shadow_offset))
+        caption_clip = TextClip(captions[i], fontsize=fontsize, color="white", font=font, size=(clip.w, clip.h), method="caption").set_duration(duration).set_start(i * duration).set_position((0, 0))
         caption_clips.append(shadow_caption_clip)
         caption_clips.append(caption_clip)
     return caption_clips
 
-def prompt():
+def quiz_prompt():
     gpt = gpt4all.GPT4All(model_name="mistral-7b-openorca.Q4_0.gguf", model_path=r"C:\Users\Thomas\AppData\Local\nomic.ai\GPT4All\\")
     with gpt.chat_session():
-        response1 = gpt.generate(prompt='hello, tell me a really interesting fact, which i do not know.', temp=0)
+        response1 = gpt.generate(prompt="""
+                                hello, please create a possible quiz question for me with 4 possible answers and number
+                                them with 1., 2., 3. and 4. one of them should be correct. Also tell me the solution.
+                                """, temp=0)
+        #response2 = gpt.generate(prompt='create 4 possible answers, one of them should be correct', temp=0)
+
         print(response1)
-        print(gpt.current_chat_session)
+        #print(response2)
     return response1
 
-if __name__ == '__main__':
-    generated_text = prompt()
-    #generated_text = "Hello, this is a test sentence."
-    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", 30)
-    caption_clips = get_caption_video(cutted_clip, CAPTIONS_PATH, generated_text)
+def speech_to_text():
+    set_api_key("986b28071a2fbdbd045246501bcec14f")
+    voice = clone(
+        name=""
+    )
+
+def generate_video_with_captions(text):
+    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", 15)
+    caption_clips = get_caption_video(cutted_clip, CAPTIONS_PATH, text, "NWORD")
     full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
     full_clip.write_videofile(OUTPUT_VIDEOS_PATH + "video_with_captions.mp4")
+
+def generate_quiz_video_with_captions():
+    generated_text = quiz_prompt()
+    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", 10)
+    caption_clips = get_caption_video(cutted_clip, CAPTIONS_PATH, generated_text, "PERLINE")
+    full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
+    full_clip.write_videofile(OUTPUT_VIDEOS_PATH + "video_with_captions.mp4")
+
+if __name__ == '__main__':
+    generate_quiz_video_with_captions()
+    
+    
