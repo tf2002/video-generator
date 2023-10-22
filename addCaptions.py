@@ -2,11 +2,15 @@ import random
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
 import math
+import gpt4all
+
+
 BACKGROUND_VIDEOS_PATH = r".\BackgroundVideos\\"
 CUTTED_VIDEOS_PATH = r".\CuttedVideos\\"
 OUTPUT_VIDEOS_PATH = r".\OutputVideos\\"
 CAPTIONS_PATH = r".\Captions.txt"
-FONT_PATH = r".Gabarito,Nunito_Sans\Nunito_Sans\NunitoSans-VariableFont_YTLC,opsz,wdth,wght.ttf"
+FONT_PATH = r".KOMIKAX_.ttf"
+
 def get_video_duration(video_file_name):
     clip = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_file_name)
     duration = clip.duration
@@ -28,23 +32,30 @@ def cut_background_video(video_file_name, length):
     else:
         print("Error: Video Clip is not long enough. Wished length", length, "seconds, but material length is", int(originalDuration - 2 * margin),"seconds without margin.")
 
-def get_captions(captions_path, n_words):
+def get_captions(captions_path, caption_text, n_words):
     cutted_captions = []
-    with open(captions_path, 'r') as file:
-        captions = file.readlines()
-        for captions_string in captions:
-            words = captions_string.split()
-            words_in_sets_of_five = [words[i:i+n_words] for i in range(0, len(words), n_words)]
-            for word_set in words_in_sets_of_five:
-                full_sentence = ""
-                for word in word_set:
-                    full_sentence = full_sentence + " " + word 
-                cutted_captions.append(full_sentence)
+    
+    if caption_text == "":
+        with open(captions_path, 'r') as file:
+            captions_array = file.readlines()
+            captions = ""
+            for caption_string in captions_array:
+                captions = captions + caption_string
+            print(captions)
+    else:
+        captions = caption_text
+    words = captions.split()
+    words_in_sets_of_five = [words[i:i+n_words] for i in range(0, len(words), n_words)]
+    for word_set in words_in_sets_of_five:
+        full_sentence = ""
+        for word in word_set:
+            full_sentence = full_sentence + " " + word 
+        cutted_captions.append(full_sentence)
     return cutted_captions
 
-def get_caption_video(clip, captions_path):
+def get_caption_video(clip, captions_path, caption_text):
     caption_clips =[]
-    captions = get_captions(captions_path, 3)
+    captions = get_captions(captions_path, caption_text, 5)
     duration = clip.duration/len(captions)
 
     fontsize = 55
@@ -57,8 +68,18 @@ def get_caption_video(clip, captions_path):
         caption_clips.append(caption_clip)
     return caption_clips
 
+def prompt():
+    gpt = gpt4all.GPT4All(model_name="mistral-7b-openorca.Q4_0.gguf", model_path=r"C:\Users\Thomas\AppData\Local\nomic.ai\GPT4All\\")
+    with gpt.chat_session():
+        response1 = gpt.generate(prompt='hello, tell me a really interesting fact, which i do not know.', temp=0)
+        print(response1)
+        print(gpt.current_chat_session)
+    return response1
+
 if __name__ == '__main__':
-    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", 5)
-    caption_clips = get_caption_video(cutted_clip, CAPTIONS_PATH)
+    generated_text = prompt()
+    #generated_text = "Hello, this is a test sentence."
+    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", 30)
+    caption_clips = get_caption_video(cutted_clip, CAPTIONS_PATH, generated_text)
     full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
     full_clip.write_videofile(OUTPUT_VIDEOS_PATH + "video_with_captions.mp4")
