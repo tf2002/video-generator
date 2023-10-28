@@ -23,16 +23,20 @@ def get_video_duration(video_file_name):
 def cut_background_video(video_file_name, length):
     margin = 7
     originalDuration = float(get_video_duration(video_file_name))
+    clip = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_file_name)
+    
     if int(originalDuration - margin - length) > margin:
         beginningTimestamp = random.randrange(margin, int(originalDuration - margin - length))
         endingTimestamp = beginningTimestamp + length
-        clip = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_file_name)
-        new_width = 9 * clip.h / 16
-        x_center = clip.w/2
-        left_margin = x_center - new_width/2
-        cropped_clip = clip.crop(x1=math.ceil(left_margin), x2=math.floor(clip.w - left_margin))
+        if clip.w <= 610:
+            return clip.subclip(beginningTimestamp, endingTimestamp)
+        else:
+            new_width = 9 * clip.h / 16
+            x_center = clip.w/2
+            left_margin = x_center - new_width/2
+            cropped_clip = clip.crop(x1=math.ceil(left_margin), x2=math.floor(clip.w - left_margin))
 
-        return cropped_clip.subclip(beginningTimestamp, endingTimestamp)
+            return cropped_clip.subclip(beginningTimestamp, endingTimestamp)
     else:
         print("Error: Video Clip is not long enough. Wished length", length, "seconds, but material length is", int(originalDuration - 2 * margin),"seconds without margin.")
 
@@ -69,11 +73,11 @@ MODES:
     NWORD: -every n-th word
     PERLINE: -every line separate
 """
-def get_caption_video(caption_text, duration, clip, beginning_time, yPosition, fontsize):
+def get_caption_video(caption_text, duration, clip, beginning_time, yPosition, fontsize, color="white"):
     shadow_offset = 2
-    font = FONT_PATH + "KOMIKAX_.ttf"
-    shadow_caption_clip = TextClip(caption_text, fontsize=fontsize, color="black", font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((-shadow_offset, shadow_offset + yPosition))
-    caption_clip = TextClip(caption_text, fontsize=fontsize, color="white", font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((0, yPosition))
+    font = FONT_PATH + "Anton-Regular.ttf"
+    shadow_caption_clip = TextClip(caption_text, fontsize=fontsize, color="black", font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((-shadow_offset + 20, shadow_offset + yPosition))
+    caption_clip = TextClip(caption_text, fontsize=fontsize, color=color, font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((20, yPosition))
     return caption_clip, shadow_caption_clip
 
 def get_audio_file_clip(filename, beginning_time):
@@ -84,14 +88,14 @@ def quiz_prompt():
     gpt = gpt4all.GPT4All(model_name="mistral-7b-openorca.Q4_0.gguf", model_path=r"C:\Users\Thomas\AppData\Local\nomic.ai\GPT4All\\")
     with gpt.chat_session():
         response1 = gpt.generate(prompt="""
-                                hello, please create a possible quiz question for me with 4 possible answers and number
+                                hello, please create a possible ,very interesting quiz question for me with 4 possible answers and number
                                 them with A), B), C) and D) one of them should be correct. Also tell me the solution.
-                                """, temp=0.9)
+                                """, temp=0.99)
         print(response1)
-        response2 = gpt.generate(prompt='take this quiz and translate it line by line to german language: ' + response1, temp=0)
+        #response2 = gpt.generate(prompt='take this quiz and translate it line by line to german language: ' + response1, temp=0)
         
-        print(response2)
-    return response2
+        #print(response2)
+    return response1
 
 def speech_to_text_elevenlabs(text, timestamp):
     set_api_key("986b28071a2fbdbd045246501bcec14f")
@@ -104,7 +108,7 @@ def speech_to_text_elevenlabs(text, timestamp):
     #   audio_file.write(audio)
     return audio
 
-async def text_to_speech_edge(text, name, VOICE="de-DE-KillianNeural"):
+async def text_to_speech_edge(text, name, n_words, VOICE="de-DE-KillianNeural"):
     communicate = edge_tts.Communicate(text, VOICE)
     submaker = edge_tts.SubMaker()
     
@@ -112,7 +116,7 @@ async def text_to_speech_edge(text, name, VOICE="de-DE-KillianNeural"):
     async for chunk in communicate.stream():
         if chunk["type"] == "WordBoundary":
                 submaker.create_sub((chunk["offset"], chunk["duration"]), chunk["text"])
-    return submaker.generate_subs(3)
+    return submaker.generate_subs(n_words)
 
 def get_audio_duration(audio_bytes):
     data, samplerate = sf.read(io.BytesIO(audio_bytes))
@@ -127,77 +131,147 @@ def generate_video_with_captions(text):
     full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
     full_clip.write_videofile(OUTPUT_VIDEOS_PATH + "video_with_captions.mp4")
 
-def generate_quiz_video_with_captions(counter):
+def generate_quiz_video_with_captions(counter, output_filename):
     #Get the generated text of LLM with prompt
-    generated_text = quiz_prompt()
-    """
-    generated_text =Welcher ist der größte Planet unseres Sonnensystems?
-A) Merkur
-B) Venus
-C) Erde
-D) Jupiter
+    #generated_text = quiz_prompt()
+    
+    generated_text ="""Wer rappt: "Ich komm' auf 180, niemand kann mich bändigen?"
+A) SSIO
+B) RIN
+C) Capital Bra
+D) Bushido
 
-Lösung: D) Jupiter
-    """
+Lösung: C) Capital Bra
+"""
     cleaned_text = clean_text(generated_text)
-    print(cleaned_text)
+    intro_duration = 2
     captions = get_captions_per_line(cleaned_text)
     
     loop = asyncio.get_event_loop_policy().get_event_loop()
-    subs = loop.run_until_complete(text_to_speech_edge(cleaned_text, name="speech.mp3"))
+    subs = loop.run_until_complete(text_to_speech_edge(cleaned_text, "speech.mp3", 3))
 
     audio = AudioFileClip(OUTPUT_VIDEOS_PATH + "speech.mp3")
-    cutted_clip = cut_background_video("Minecraft_jump_and_run.mkv", audio.duration + counter + 1)
+    cutted_clip = cut_background_video("minecraft_jump_and_run.mkv", audio.duration + 3 + intro_duration)
 
     caption_clips = []
     audio_clips = []
+
+    #beginning sequence
+    intro_sound = volumex(AudioFileClip("WWM_begin.mp3").set_start(0), 0.25)
+    audio_clips.append(intro_sound)
+    blinks = 25
+    blink_duration = intro_duration/blinks
+    first = True
+    intro_text = "1 Million € Frage (RAP EDITION)"
+    for i in range(blinks):
+        if first:
+            shadow_cap, normal_cap = get_caption_video(intro_text, blink_duration, cutted_clip, i * blink_duration, 0, 60 - i, color="rgb(0, 51, 204)")
+        else:
+            shadow_cap, normal_cap = get_caption_video(intro_text, blink_duration, cutted_clip, i * blink_duration, 0, 60 - i, color="rgb(255, 255, 255)")
+        first = not first
+        caption_clips.append(normal_cap)
+        caption_clips.append(shadow_cap)
     #iterate through every text element
-    beginning_time = 0
-    yPosition = -350
+    beginning_time = intro_duration
+    yPosition = -300
     counter_starttime = 0
     solution_starttime = 0
-    for i in range(len(captions)):
-        subs = loop.run_until_complete(text_to_speech_edge(captions[i], name="speech_" + str(i)+ ".mp3"))
-        shadow_cap, normal_cap = get_caption_video(captions[i], cutted_clip.duration - beginning_time, cutted_clip, beginning_time, yPosition, 45)
-        
+    for i in range(len(captions) - 1):
+        subs = loop.run_until_complete(text_to_speech_edge(captions[i], "speech_" + str(i)+ ".mp3", 3))
+        color = "rgba(0,255,255)"
+        if i%2 != 0:
+            color="rgb(0, 51, 204)"
+        shadow_cap, normal_cap = get_caption_video(captions[i], cutted_clip.duration - beginning_time, cutted_clip, beginning_time, yPosition, 45, color = color)
         caption_clips.append(normal_cap)
         caption_clips.append(shadow_cap)
 
         audio_clip = volumex(get_audio_file_clip("speech_" + str(i)+ ".mp3", beginning_time), 1.3)
         audio_clips.append(audio_clip)
-        if(i == 5):
-            solution_starttime = beginning_time - 0.5
-        elif(i == 4):
-            counter_starttime = beginning_time + 1
-            for j in range(counter, 0, -1):
-                shadow_cap, normal_cap = get_caption_video(str(j), 1, cutted_clip, beginning_time + 1 + 5-j, yPosition + 100, 80)
+
+        if(i == 1):
+            counter_starttime = beginning_time 
+            solution_starttime = counter_starttime + counter
+            fakecounter = 8
+            fakecounter_time = counter / fakecounter
+            for j in range(fakecounter, 0, -1):
+                shadow_cap, normal_cap = get_caption_video(str(j), fakecounter_time, cutted_clip, beginning_time + (fakecounter - j) * fakecounter_time, yPosition + 350, 80)
                 caption_clips.append(normal_cap)
                 caption_clips.append(shadow_cap)
-            beginning_time += counter - 0.5
-            
+            shadow_cap, normal_cap = get_caption_video(captions[len(captions) - 1],  cutted_clip.duration - solution_starttime, cutted_clip, solution_starttime, 450, 45, color="rgb(0, 255, 0)")
+            caption_clips.append(normal_cap)
+            caption_clips.append(shadow_cap)
+            loop.run_until_complete(text_to_speech_edge(captions[len(captions)-1], "speech_" + str(len(captions)-1) + ".mp3", 3))
+            audio_clip = volumex(get_audio_file_clip("speech_" + str(len(captions) - 1 )+ ".mp3", solution_starttime), 1.3)
+            audio_clips.append(audio_clip)
         beginning_time += audio_clip.duration
 
         if(i == 0):
             yPosition += 200
         elif(i == 4):
-            yPosition += 200
+            yPosition += 150
         yPosition += 70
 
     full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
 
-    background_music = volumex(AudioFileClip("WWM_soundtrack.mp3").subclip(0, solution_starttime), 0.7)
-    winning_sound = volumex(AudioFileClip("WWM_gewinn_sound.mp3").set_start(solution_starttime), 0.22)
+    background_music = volumex(AudioFileClip("WWM_soundtrack.mp3").subclip(0, solution_starttime), 0.58).set_start(intro_duration).set_duration(solution_starttime - 0.5 - intro_duration)
+    winning_sound = volumex(AudioFileClip("WWM_gewinn_sound.mp3").set_start(solution_starttime -0.5 ), 0.22)
     full_counter_sound = volumex(AudioFileClip("30_sec_timer.mp3"), 0.1)
     counter_sound = volumex(full_counter_sound.subclip(full_counter_sound.duration - counter, full_counter_sound.duration).set_start(counter_starttime), 1.25)
 
+
+
     full_audio = CompositeAudioClip(audio_clips + [background_music] + [winning_sound] + [counter_sound])   
-    
     for audio_clip in audio_clips:
         full_clip = full_clip.set_audio(full_audio)
+    full_clip.write_videofile(OUTPUT_VIDEOS_PATH + output_filename + ".mp4", fps=24, threads=8)
 
-    full_clip.write_videofile(OUTPUT_VIDEOS_PATH + "video_with_captions.mp4", fps=24, threads=4)
+"""
+returns list with this structure:
+    [['00:00:00.100 --> 00:00:00.525', 'Hallo'], ...]
+"""
+def caption_word_by_word(raw_text):
+    list_raw_text = raw_text.splitlines()
+    removed_element = list_raw_text.pop(0)
+    for line in list_raw_text:
+        if not line:
+            list_raw_text.remove(line)
 
+    caption_list = []
+    for i in range(0, len(list_raw_text), 2):
+        subarray = list_raw_text[i:i+2]
+        caption_list.append(subarray)
+    return caption_list
+
+def calculate_time(raw_time):
+    time = raw_time.split(':')
+    return float(time[0])*3600 + float(time[1])*60 + float(time[2])
+
+
+def generate_single_video_with_captions(output_filename):
+    generated_text = "Wie funktioniert ein Computer? Ein Computer ist eine Maschine, die Informationen annimmt, speichert und verarbeitet. Dies geschieht durch den Prozessor, der Anweisungen ausführt. Die Daten werden im Speicher kurzfristig gehalten und auf der Festplatte dauerhaft gespeichert. Das Ergebnis wird auf dem Bildschirm oder anderen Geräten angezeigt. Dieser Prozess wiederholt sich kontinuierlich."
+    loop = asyncio.get_event_loop_policy().get_event_loop()
+    subs = loop.run_until_complete(text_to_speech_edge(generated_text, name="speech.mp3", n_words=1))
+
+    audio = AudioFileClip(OUTPUT_VIDEOS_PATH + "speech.mp3")
+    cutted_clip = cut_background_video("horizon_gameplay.mp4", audio.duration)
+    captions = caption_word_by_word(subs)
+    caption_clips = []
+    for caption in captions:
+        time = caption[0]
+        list_time = time.split(' --> ')
+        beginning_time = calculate_time(list_time[0])
+        ending_time = calculate_time(list_time[1])
+
+
+        shadow_cap, normal_cap = get_caption_video(caption[1], ending_time-beginning_time, cutted_clip, beginning_time, 0, 55)
+        caption_clips.append(normal_cap)
+        caption_clips.append(shadow_cap)
+
+    full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
+    full_clip = full_clip.set_audio(audio)
+    full_clip.write_videofile(OUTPUT_VIDEOS_PATH + output_filename, fps=24, threads=8)
 if __name__ == '__main__':
-    generate_quiz_video_with_captions(5)
-    
+    generate_quiz_video_with_captions(12, "rap_quiz.mp4")
+    #generate_single_video_with_captions("horizon_gameplay.mp4")
+
 
