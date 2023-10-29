@@ -40,6 +40,17 @@ def cut_background_video(video_file_name, length):
     else:
         print("Error: Video Clip is not long enough. Wished length", length, "seconds, but material length is", int(originalDuration - 2 * margin),"seconds without margin.")
 
+def cut_two_videos(video_name_up, video_name_down, video_length, video_resolution):
+    resize_factor = 0.5
+    x, y = video_resolution
+    clip_up = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_name_up)
+    clip_down = VideoFileClip(BACKGROUND_VIDEOS_PATH + video_name_down)
+
+    cropped_clip_up = clip_up.subclip(0, video_length).resize(resize_factor)
+    cropped_clip_down = clip_down.resize(resize_factor)
+    cropped_clip_down = cropped_clip_down.subclip(0, video_length).set_position((0, y - cropped_clip_down.h))
+    return [cropped_clip_up, cropped_clip_down]
+
 def get_captions(captions_path, caption_text, n_words):
     cutted_captions = []
     
@@ -75,7 +86,7 @@ MODES:
 """
 def get_caption_video(caption_text, duration, clip, beginning_time, yPosition, fontsize, color="white"):
     shadow_offset = 2
-    font = FONT_PATH + "Anton-Regular.ttf"
+    font = FONT_PATH + "ObelixPro-cyr.ttf"
     shadow_caption_clip = TextClip(caption_text, fontsize=fontsize, color="black", font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((-shadow_offset + 20, shadow_offset + yPosition))
     caption_clip = TextClip(caption_text, fontsize=fontsize, color=color, font=font, size=(clip.w - 50, clip.h), method="caption").set_duration(duration).set_start(beginning_time).set_position((20, yPosition))
     return caption_clip, shadow_caption_clip
@@ -135,13 +146,13 @@ def generate_quiz_video_with_captions(counter, output_filename):
     #Get the generated text of LLM with prompt
     #generated_text = quiz_prompt()
     
-    generated_text ="""Wer rappt: "Ich komm' auf 180, niemand kann mich bändigen?"
-A) SSIO
-B) RIN
-C) Capital Bra
-D) Bushido
+    generated_text ="""Wer war der CEO von TikTok bis Juni 2021 und gründete die Firma ByteDance?
+A) Mark Zuckerberg
+B) Zhang Yiming
+C) Evan Spiegel
+D) Jeff Bezos
 
-Lösung: C) Capital Bra
+Antwort: B) Zhang Yiming
 """
     cleaned_text = clean_text(generated_text)
     intro_duration = 2
@@ -151,7 +162,7 @@ Lösung: C) Capital Bra
     subs = loop.run_until_complete(text_to_speech_edge(cleaned_text, "speech.mp3", 3))
 
     audio = AudioFileClip(OUTPUT_VIDEOS_PATH + "speech.mp3")
-    cutted_clip = cut_background_video("minecraft_jump_and_run.mkv", audio.duration + 3 + intro_duration)
+    cutted_clip = cut_background_video("Doodle_jump.mp4", audio.duration + 3 + intro_duration)
 
     caption_clips = []
     audio_clips = []
@@ -162,7 +173,7 @@ Lösung: C) Capital Bra
     blinks = 25
     blink_duration = intro_duration/blinks
     first = True
-    intro_text = "1 Million € Frage (RAP EDITION)"
+    intro_text = "1.000.000€ Frage"
     for i in range(blinks):
         if first:
             shadow_cap, normal_cap = get_caption_video(intro_text, blink_duration, cutted_clip, i * blink_duration, 0, 60 - i, color="rgb(0, 51, 204)")
@@ -178,7 +189,7 @@ Lösung: C) Capital Bra
     solution_starttime = 0
     for i in range(len(captions) - 1):
         subs = loop.run_until_complete(text_to_speech_edge(captions[i], "speech_" + str(i)+ ".mp3", 3))
-        color = "rgba(0,255,255)"
+        color = "rgb(0, 51, 204)"
         if i%2 != 0:
             color="rgb(0, 51, 204)"
         shadow_cap, normal_cap = get_caption_video(captions[i], cutted_clip.duration - beginning_time, cutted_clip, beginning_time, yPosition, 45, color = color)
@@ -261,8 +272,6 @@ def generate_single_video_with_captions(output_filename):
         list_time = time.split(' --> ')
         beginning_time = calculate_time(list_time[0])
         ending_time = calculate_time(list_time[1])
-
-
         shadow_cap, normal_cap = get_caption_video(caption[1], ending_time-beginning_time, cutted_clip, beginning_time, 0, 55)
         caption_clips.append(normal_cap)
         caption_clips.append(shadow_cap)
@@ -270,8 +279,16 @@ def generate_single_video_with_captions(output_filename):
     full_clip = CompositeVideoClip([cutted_clip] + caption_clips)
     full_clip = full_clip.set_audio(audio)
     full_clip.write_videofile(OUTPUT_VIDEOS_PATH + output_filename, fps=24, threads=8)
+
+def generate_two_speedruns(video_name_up, video_name_down, output_filename):
+    video_size = (1080, 1920)
+    clips = cut_two_videos(video_name_up, video_name_down, 5, video_size)
+    full_clip = CompositeVideoClip(clips, size=video_size)
+    full_clip.write_videofile(OUTPUT_VIDEOS_PATH + output_filename, fps=24, threads=8)
+
 if __name__ == '__main__':
-    generate_quiz_video_with_captions(12, "rap_quiz.mp4")
+    #generate_quiz_video_with_captions(12, "new_quiz.mp4")
     #generate_single_video_with_captions("horizon_gameplay.mp4")
+    generate_two_speedruns("Minecraft_jump_and_run.mkv", "Minecraft_jump_and_run.mkv", "speedrun.mp4")
 
 
