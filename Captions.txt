@@ -1,3 +1,0 @@
-In this code, we first split the long string into individual words using the split() method. Then, we use a list comprehension to create a new list, words_in_sets_of_five,
-where each element is a list containing 5 words from the original string. Finally,
-we iterate through this list and print each set of 5 words.
